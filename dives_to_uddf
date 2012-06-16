@@ -1,6 +1,7 @@
 #!/usr/bin/tclsh8.5
 
 package require Tclx
+package require tdom
 
 proc logmsg {buf} {
 	puts $buf
@@ -45,6 +46,13 @@ proc iso_datetime {candate} {
 	return $buf
 }
 
+proc tdom_add_text {doc base name contents} {
+	set node [$doc createElement $name]
+	$node appendChild [$doc createTextNode $contents]
+	$base appendChild $node
+	return
+}
+
 proc export_xml {wpvar} {
 	upvar 1 $wpvar waypoints
 
@@ -53,17 +61,54 @@ proc export_xml {wpvar} {
 		#return
 	}
 
-	set fh [open $waypoints(outfile) w]
-	puts $fh {<uddf version="3.1.0">}
-	puts $fh {  <generator><name>cochran_to_uddf</name><manufacturer><name>David McNett</name></manufacturer><version>1.0</version></generator>}
+	set doc [dom createDocument uddf]
+	$doc encoding utf-8
+	
+	set root [$doc documentElement]
+	$root setAttribute version 3.0.0
 
-	puts $fh [xml_date $waypoints(candate)]
-	puts $fh {<profiledata>}
-	puts $fh "<repetitiongroup id=\"$waypoints(basename)\">"
-	puts $fh "<dive id=\"$waypoints(basename)\">"
-	puts $fh "<datetime>[iso_datetime $waypoints(candate)]</datetime>"
+	set node_generator [$doc createElement generator]
+	$root appendChild $node_generator
 
-	puts $fh {<samples>}
+	tdom_add_text $doc $node_generator name		cochran2uddf
+	tdom_add_text $doc $node_generator version	1.0
+	tdom_add_text $doc $node_generator datetime	[clock format [clock seconds] -format "%Y-%m-%dT%H:%MZ" -gmt 1]
+	tdom_add_text $doc $node_generator type		converter
+
+	set node_manufacturer [$doc createElement manufacturer]
+	$node_generator appendChild $node_manufacturer
+
+	tdom_add_text $doc $node_manufacturer name	"David McNett"
+
+	set node_contact [$doc createElement contact]
+	$node_manufacturer appendChild $node_contact
+
+	tdom_add_text $doc $node_contact email		nugget@macnugget.org
+	tdom_add_text $doc $node_contact homepage	https://github.com/nugget/cochran2uddf
+
+	set node [$doc createElement name]
+	$node appendChild [$doc createTextNode "David McNett"]
+	$node_manufacturer appendChild $node
+
+	set node_profiledata [$doc createElement profiledata]
+	$root appendChild $node_profiledata
+
+	set node_rep [$doc createElement repetitiongroup]
+	$node_profiledata appendChild $node_rep
+	$node_rep setAttribute id $waypoints(basename)
+
+	set node_dive [$doc createElement dive]
+	$node_rep appendChild $node_dive
+	$node_dive setAttribute id $waypoints(basename)
+
+	set node_before [$doc createElement informationbeforedive]
+	$node_dive appendChild $node_before
+	tdom_add_text $doc $node_before internaldivenumber $waypoints(dive_number)
+	tdom_add_text $doc $node_before datetime [iso_datetime $waypoints(candate)]
+
+	set node_samples [$doc createElement samples]
+	$node_dive appendChild $node_samples
+
 	for {set i 0} {$i < [llength $waypoints(depths)]} {incr i} {
 		set seconds		$i
 		set feet		[lindex $waypoints(depths) $i]
@@ -74,19 +119,13 @@ proc export_xml {wpvar} {
 		set pressure_p	[expr $pressure_c * 4]
 		set pascals		[expr $pressure_p * 6894.75729]
 
-		puts $fh {<waypoint>}
-		puts $fh "<depth>[format %8.3f $meters]</depth>"
-		puts $fh "<temperature>[format %6.1f $temp_k]</temperature>"
-		puts $fh "<divetime>[format %6.1f $i]</divetime>"
-		puts $fh "<tankpressure>[format %10.1f $pascals]</tankpressure>"
-		puts $fh {</waypoint>}
+		set node [$doc createElement waypoint]
+		$node_samples appendChild $node
+		tdom_add_text $doc $node depth			[string trim [format %8.3f $meters]]
+		tdom_add_text $doc $node divetime		[string trim [format %6.1f $i]]
+		tdom_add_text $doc $node tankpressure	[string trim [format %10.1f $pascals]]
+		tdom_add_text $doc $node temperature	[string trim [format %6.1f $temp_k]]
 	}
-	puts $fh {</samples>}
-
-	puts $fh {</dive>}
-	puts $fh {</repetitiongroup>}
-
-	puts $fh {</profiledata>}
 
 	# parray waypoints
 
@@ -99,9 +138,11 @@ proc export_xml {wpvar} {
 	logmsg "       s: [lrange $waypoints(hp1) 0 10]"
 	logmsg "       e: [lrange $waypoints(hp1) end-10 end]"
 
-	puts $fh {</uddf>}
+	set fh [open $waypoints(outfile) w]
+	puts $fh [$root asXML]
 	close $fh
 
+	$doc delete
 }
 
 proc parse_csv {wpvar file values} {
