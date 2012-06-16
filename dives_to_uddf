@@ -126,6 +126,8 @@ proc parse_csv {wpvar file values} {
 proc main {} {
 	set basename ""
 
+	cd import
+
 	foreach file [lsort [glob T*]] {
 		if {$basename != [file rootname $file]} {
 			set basename [file rootname $file]
@@ -140,7 +142,7 @@ proc main {} {
 
 			set waypoints(basename)		$basename
 			set waypoints(dive_number)	$dive_number
-			set waypoints(outfile)		"export/${basename}.uddf"
+			set waypoints(outfile)		"../export/${basename}.uddf"
 		}
 
 		set ext [file extension $file]
