@@ -1,0 +1,168 @@
+#!/usr/local/bin/tclsh8.5
+
+package require Tclx
+
+proc logmsg {buf} {
+	puts $buf
+}
+
+proc get_avg {l} {
+	set n [llength $l]
+	if {!$n} {return 0.0}
+	set avg 0.0
+	foreach r $l {
+		set avg [expr $avg + $r]
+	}
+	set avg [expr $avg/double($n)]
+	return $avg
+}
+
+proc xml_date {candate} {
+	# 18Sep11 09:38:47
+	set monthlist [list _ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
+	
+	set buf ""
+	regexp {(\d\d)(...)(\d\d) (\d\d):(\d\d):(\d\d)} $candate _ dd mmm yy hour minute seconds
+	set yyyy [expr 2000 + $yy]
+	set mm [lsearch -exact $monthlist $mmm]
+
+	set buf "<date><year>$yyyy</year><month>$mm</month><day>$dd</day></date><time><hour>$hour</hour><minute>$minute</minute></time>"
+
+	return $buf
+}
+
+proc iso_datetime {candate} {
+	# 18Sep11 09:38:47
+	set monthlist [list _ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
+	
+	set buf ""
+	regexp {(\d\d)(...)(\d\d) (\d\d):(\d\d):(\d\d)} $candate _ dd mmm yy hour minute seconds
+	set yyyy [expr 2000 + $yy]
+	set mm [lsearch -exact $monthlist $mmm]
+
+	set buf "[format "%04d" $yyyy]-[format "%02d" $mm]-[format "%02d" $dd]T$hour:$minute"
+
+	return $buf
+}
+
+proc export_xml {wpvar} {
+	upvar 1 $wpvar waypoints
+
+	if {[file exists $waypoints(outfile)]} {
+		logmsg "  Outfile already exists"
+		#return
+	}
+
+	set fh [open $waypoints(outfile) w]
+	puts $fh {<uddf version="3.1.0">}
+	puts $fh {  <generator><name>cochran_to_uddf</name><manufacturer><name>David McNett</name></manufacturer><version>1.0</version></generator>}
+
+	puts $fh [xml_date $waypoints(candate)]
+	puts $fh {<profiledata>}
+	puts $fh "<repetitiongroup id=\"$waypoints(basename)\">"
+	puts $fh "<dive id=\"$waypoints(basename)\">"
+	puts $fh "<datetime>[iso_datetime $waypoints(candate)]</datetime>"
+
+	puts $fh {<samples>}
+	for {set i 0} {$i < [llength $waypoints(depths)]} {incr i} {
+		set seconds		$i
+		set feet		[lindex $waypoints(depths) $i]
+		set meters		[expr $feet * 0.3048]
+		set temp_f		[lindex $waypoints(temps) $i]
+		set temp_k		[expr ($temp_f - 32) * 5/9 + 273.15]
+		set pressure_c	[lindex $waypoints(hp1) $i]
+		set pressure_p	[expr $pressure_c * 4]
+		set pascals		[expr $pressure_p * 6894.75729]
+
+		puts $fh {<waypoint>}
+		puts $fh "<depth>[format %8.3f $meters]</depth>"
+		puts $fh "<temperature>[format %6.1f $temp_k]</temperature>"
+		puts $fh "<divetime>[format %6.1f $i]</divetime>"
+		puts $fh "<tankpressure>[format %10.1f $pascals]</tankpressure>"
+		puts $fh {</waypoint>}
+	}
+	puts $fh {</samples>}
+
+	puts $fh {</dive>}
+	puts $fh {</repetitiongroup>}
+
+	puts $fh {</profiledata>}
+
+	# parray waypoints
+
+	logmsg "Data element count:"
+	logmsg "  depths: [llength $waypoints(depths)]"
+	logmsg "        : [lrange $waypoints(depths) 10 30]"
+	logmsg "  avgdpt: [get_avg $waypoints(depths)]"
+	logmsg "  temps : [llength $waypoints(temps)]"
+	logmsg "  hp1   : [llength $waypoints(hp1)]"
+	logmsg "       s: [lrange $waypoints(hp1) 0 10]"
+	logmsg "       e: [lrange $waypoints(hp1) end-10 end]"
+
+	puts $fh {</uddf>}
+	close $fh
+
+}
+
+proc parse_csv {wpvar file values} {
+	logmsg "  importing $file $values to $wpvar"
+	upvar 1 $wpvar waypoints
+
+	set fbuf [read_file $file]
+	set blist [split $fbuf ","]
+
+	set waypoints(canfile)	[lindex $blist 0]
+	set waypoints(divenum)	[lindex $blist 1]
+	set waypoints(candate)	[lindex $blist 2]
+	set waypoints(unk1)		[lindex $blist 3]
+	set waypoints(unk2)		[lindex $blist 4]
+	set waypoints(model)	[lindex $blist 5]
+	set waypoints(unk3)		[lindex $blist 7]
+	set waypoints($values)	[lrange $blist 8 end-1]
+
+	return
+}
+
+proc main {} {
+	set basename ""
+
+	foreach file [lsort [glob T*]] {
+		if {$basename != [file rootname $file]} {
+			set basename [file rootname $file]
+			regexp {D(\d+)$} $basename _ dive_number
+
+			if {[array exists waypoints]} {
+				export_xml waypoints
+			}
+
+			logmsg "$basename ($dive_number)"
+			unset -nocomplain waypoints
+
+			set waypoints(basename)		$basename
+			set waypoints(dive_number)	$dive_number
+			set waypoints(outfile)		"export/${basename}.uddf"
+		}
+
+		set ext [file extension $file]
+
+		switch $ext {
+			.dpt {
+				parse_csv waypoints $file depths
+			}
+			.hp1 {
+				parse_csv waypoints $file hp1
+			}
+			.tmp {
+				parse_csv waypoints $file temps
+			}
+			default {
+				logmsg "Unknown extension: $ext"
+			}
+		}
+	}
+	if {[array exists waypoints]} {
+		export_xml waypoints
+	}
+}
+
+if !$tcl_interactive main
