@@ -18,20 +18,6 @@ proc get_avg {l} {
 	return $avg
 }
 
-proc xml_date {candate} {
-	# 18Sep11 09:38:47
-	set monthlist [list _ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
-	
-	set buf ""
-	regexp {(\d\d)(...)(\d\d) (\d\d):(\d\d):(\d\d)} $candate _ dd mmm yy hour minute seconds
-	set yyyy [expr 2000 + $yy]
-	set mm [lsearch -exact $monthlist $mmm]
-
-	set buf "<date><year>$yyyy</year><month>$mm</month><day>$dd</day></date><time><hour>$hour</hour><minute>$minute</minute></time>"
-
-	return $buf
-}
-
 proc iso_datetime {candate} {
 	# 18Sep11 09:38:47
 	set monthlist [list _ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec]
