@@ -3,6 +3,8 @@
 package require Tclx
 package require tdom
 
+set ::max_surface_interval [expr 60 * 60 * 12]
+
 proc logmsg {buf} {
 	puts $buf
 }
@@ -46,6 +48,20 @@ proc export_xml {wpvar} {
 		#logmsg "  Outfile already exists"
 		#return
 	}
+
+
+	if {[info exists waypoints(candate)]} {
+		set waypoints(epoch) [clock scan [iso_datetime $waypoints(candate)]]
+	}
+
+	unset -nocomplain surface_interval
+	if {[info exists ::last_dive(epoch)]} {
+		set surface_interval [expr ($waypoints(epoch) - $::last_dive(epoch))]
+		if {$surface_interval > $::max_surface_interval} {
+			unset -nocomplain surface_interval
+		}
+	}
+	set ::last_dive(epoch) $waypoints(epoch)
 
 	set doc [dom createDocument uddf]
 	$doc encoding utf-8
@@ -91,6 +107,18 @@ proc export_xml {wpvar} {
 	$node_dive appendChild $node_before
 	tdom_add_text $doc $node_before internaldivenumber $waypoints(dive_number)
 	tdom_add_text $doc $node_before datetime [iso_datetime $waypoints(candate)]
+
+	set node [$doc createElement surfaceintervalbeforedive]
+	$node_before appendChild $node
+	if {[info exists surface_interval]} {
+		logmsg "  [expr $surface_interval / 60] minute surface_interval"
+		tdom_add_text $doc $node passedtime [format "%.1f" $surface_interval]
+	} else {
+		set infinity [$doc createElement infinity]
+		$node appendChild $infinity
+	}
+
+
 
 	if {[info exists waypoints(hp1)]} {
 		set node_tankdata [$doc createElement tankdata]
@@ -262,6 +290,7 @@ proc main {} {
 			}
 		}
 	}
+
 	if {[array exists waypoints]} {
 		export_xml waypoints
 	}
