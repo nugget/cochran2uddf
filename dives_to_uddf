@@ -224,7 +224,7 @@ proc main {} {
 
 	set filelist [list]
 	foreach ext {tmp dpt hp1} {
-		set filelist [concat $filelist [glob *.$ext]]
+		set filelist [concat $filelist [glob -nocomplain *.$ext]]
 	}
 	set filelist [lsort -command divesort $filelist]
 
