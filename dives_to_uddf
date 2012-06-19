@@ -43,7 +43,7 @@ proc export_xml {wpvar} {
 	upvar 1 $wpvar waypoints
 
 	if {[file exists $waypoints(outfile)]} {
-		logmsg "  Outfile already exists"
+		#logmsg "  Outfile already exists"
 		#return
 	}
 
@@ -92,60 +92,77 @@ proc export_xml {wpvar} {
 	tdom_add_text $doc $node_before internaldivenumber $waypoints(dive_number)
 	tdom_add_text $doc $node_before datetime [iso_datetime $waypoints(candate)]
 
-	set node_tankdata [$doc createElement tankdata]
-	$node_dive appendChild $node_tankdata
-	set pressureb [expr [lindex $waypoints(hp1) 0] * 4 * 6894.75729]
-	tdom_add_text $doc $node_tankdata tankpressurebegin [string trim [format %10.1f $pressureb]]
-	set pressuree [expr [lindex $waypoints(hp1) end-1] * 4 * 6894.75729]
-	tdom_add_text $doc $node_tankdata tankpressureend [string trim [format %10.1f $pressuree]]
+	if {[info exists waypoints(hp1)]} {
+		set node_tankdata [$doc createElement tankdata]
+		$node_dive appendChild $node_tankdata
+		set pressureb [expr [lindex $waypoints(hp1) 0] * 4 * 6894.75729]
+		tdom_add_text $doc $node_tankdata tankpressurebegin [string trim [format %10.1f $pressureb]]
+		set pressuree [expr [lindex $waypoints(hp1) end-1] * 4 * 6894.75729]
+		tdom_add_text $doc $node_tankdata tankpressureend [string trim [format %10.1f $pressuree]]
+	}
 
 	set node_samples [$doc createElement samples]
 	$node_dive appendChild $node_samples
 
 	unset -nocomplain lowest_temp greatest_depth
 
-	for {set i 0} {$i < [llength $waypoints(depths)]} {incr i} {
-		set seconds		$i
-		set feet		[lindex $waypoints(depths) $i]
-		set meters		[expr $feet * 0.3048]
-		set temp_f		[lindex $waypoints(temps) $i]
-		set temp_k		[expr ($temp_f - 32) / 1.8 + 273.15]
-		set pressure_c	[lindex $waypoints(hp1) $i]
-		set pressure_p	[expr $pressure_c * 4]
-		set pascals		[expr $pressure_p * 6894.75729]
-
-		if {![info exists lowest_temp] || $temp_k < $lowest_temp} {
-			set lowest_temp [string trim [format %6.1f $temp_k]]
-		}
-		if {![info exists greatest_depth] || $meters > $greatest_depth} {
-			set greatest_depth [string trim [format %6.1f $meters]]
-		}
-
+	for {set i 0} {$i < $waypoints(count)} {incr i} {
 		set node [$doc createElement waypoint]
 		$node_samples appendChild $node
-		tdom_add_text $doc $node depth			[string trim [format %8.3f $meters]]
 		tdom_add_text $doc $node divetime		[string trim [format %6.1f $i]]
-		tdom_add_text $doc $node tankpressure	[string trim [format %10.1f $pascals]]
-		tdom_add_text $doc $node temperature	[string trim [format %6.1f $temp_k]]
+
+		if {[info exists waypoints(depths)]} {
+			set feet		[lindex $waypoints(depths) $i]
+			set meters		[expr $feet * 0.3048]
+			tdom_add_text $doc $node depth			[string trim [format %8.3f $meters]]
+
+			if {![info exists greatest_depth] || $meters > $greatest_depth} {
+				set greatest_depth [string trim [format %6.1f $meters]]
+			}
+		}
+
+		if {[info exists waypoints(temps)]} {
+			set temp_f		[lindex $waypoints(temps) $i]
+			set temp_k		[expr ($temp_f - 32) / 1.8 + 273.15]
+			tdom_add_text $doc $node temperature	[string trim [format %6.1f $temp_k]]
+
+			if {![info exists lowest_temp] || $temp_k < $lowest_temp} {
+				set lowest_temp [string trim [format %6.1f $temp_k]]
+			}
+		}
+
+		if {[info exists waypoints(hp1)]} {
+			set pressure_c	[lindex $waypoints(hp1) $i]
+			set pressure_p	[expr $pressure_c * 4]
+			set pascals		[expr $pressure_p * 6894.75729]
+			tdom_add_text $doc $node tankpressure	[string trim [format %10.1f $pascals]]
+		}
 	}
 
 	set node_after [$doc createElement informationafterdive]
 	$node_dive appendChild $node_after
-	tdom_add_text $doc $node_after lowesttemperature $lowest_temp
-	tdom_add_text $doc $node_after greatestdepth $greatest_depth
-	tdom_add_text $doc $node_after pressuredrop [expr $pressureb - $pressuree]
-	tdom_add_text $doc $node_after diveduration [string trim [format %6.1f [expr [llength $waypoints(depths)] - 1]]]
+	if {[info exists lowest_temp]} {
+		tdom_add_text $doc $node_after lowesttemperature $lowest_temp
+	}
+	if {[info exists greatest_depth]} {
+		tdom_add_text $doc $node_after greatestdepth $greatest_depth
+	}
+	if {[info exists pressureb]} {
+		tdom_add_text $doc $node_after pressuredrop [expr $pressureb - $pressuree]
+	}
+
+	tdom_add_text $doc $node_after diveduration [string trim [format %6.1f [expr $waypoints(count) - 1]]]
 
 	# parray waypoints
 
-	logmsg "Data element count:"
-	logmsg "  depths: [llength $waypoints(depths)]"
-	logmsg "        : [lrange $waypoints(depths) 10 30]"
-	logmsg "  avgdpt: [get_avg $waypoints(depths)]"
-	logmsg "  temps : [llength $waypoints(temps)]"
-	logmsg "  hp1   : [llength $waypoints(hp1)]"
-	logmsg "       s: [lrange $waypoints(hp1) 0 10]"
-	logmsg "       e: [lrange $waypoints(hp1) end-10 end]"
+	#logmsg "Data element count:"
+	#logmsg "  depths: [llength $waypoints(depths)]"
+	#logmsg "        : [lrange $waypoints(depths) 10 30]"
+	#logmsg "  avgdpt: [get_avg $waypoints(depths)]"
+	#logmsg "  temps : [llength $waypoints(temps)]"
+	#logmsg "  hp1   : [llength $waypoints(hp1)]"
+	#logmsg "       s: [lrange $waypoints(hp1) 0 10]"
+	#logmsg "       e: [lrange $waypoints(hp1) end-10 end]"
 
 	set fh [open $waypoints(outfile) w]
 	puts $fh [$root asXML]
@@ -169,6 +186,15 @@ proc parse_csv {wpvar file values} {
 	set waypoints(model)	[lindex $blist 5]
 	set waypoints(unk3)		[lindex $blist 7]
 	set waypoints($values)	[lrange $blist 8 end-1]
+
+	set num_waypoints [llength $waypoints($values)]
+	if {![info exists waypoints(count)]} {
+		set waypoints(count) $num_waypoints
+	} else {
+		if {$num_waypoints != $waypoints(count)} {
+			logmsg "WARNING: waypoint count discrepancy ($num_waypoints $values points != $waypoints(count)"
+		}
+	}
 
 	return
 }
