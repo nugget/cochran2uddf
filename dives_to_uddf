@@ -199,12 +199,36 @@ proc parse_csv {wpvar file values} {
 	return
 }
 
+proc divesort {a b} {
+	regexp {(\d+)D(\d+)} $a _ unita divea
+	regexp {(\d+)D(\d+)} $b _ unitb diveb
+
+	if {$unita > $unitb} {
+		return 1
+	} elseif {$unita < $unitb} {
+		return -1
+	}
+
+	if {$divea > $diveb} {
+		return 1
+	} elseif {$divea < $diveb} {
+		return -1
+	}
+
+	return 0
+}
 proc main {} {
 	set basename ""
 
 	cd import
 
-	foreach file [lsort [glob T*]] {
+	set filelist [list]
+	foreach ext {tmp dpt hp1} {
+		set filelist [concat $filelist [glob *.$ext]]
+	}
+	set filelist [lsort -command divesort $filelist]
+
+	foreach file $filelist {
 		if {$basename != [file rootname $file]} {
 			set basename [file rootname $file]
 			regexp {D(\d+)$} $basename _ dive_number
