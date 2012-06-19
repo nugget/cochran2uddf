@@ -13,3 +13,4 @@ Diving Log 5.0 or MacDive applications.
 * [Cochran Undersea Technology](http://www.divecochran.com/)
 * [UDDF 3.0.0 Specification](http://www.streit.cc/extern/uddf_v300/en/index.html)
 * [MacDive 2](http://www.mac-dive.com/)
+* [Subsurface](https://github.com/torvalds/subsurface/)
